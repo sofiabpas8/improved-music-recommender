@@ -1,0 +1,8 @@
+.env
+venv/
+__pycache__/
+data/songs/
+data/chroma_db_model_a/
+data/chroma_db_model_b/
+data/songs_dataset.csv
+*.pyc
