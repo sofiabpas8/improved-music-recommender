@@ -24,13 +24,11 @@ An upgraded music recommendation system that compares three approaches:
 ```
 music-recommender-rag/
 ├── data/
-│   ├── songs/                ← Raw lyrics as .json files (from Step 1)
-│   ├── songs_dataset.csv     ← ⚠ TODO: Add your audio features CSV here
+│   ├── songs_dataset.csv     ← ⚠ TODO: Add your dataset CSV here (lyrics + audio features)
 │   ├── chroma_db_model_a/    ← ChromaDB for embedding Model A (auto-generated)
 │   ├── chroma_db_model_b/    ← ChromaDB for embedding Model B (auto-generated)
 │   ├── eval_dataset.json     ← Multiple-choice evaluation questions
 │   └── rag_results.json      ← Output: accuracy + explanations (auto-generated)
-├── 01_collect_lyrics.py      ← Fetch lyrics via Genius API
 ├── 01b_baseline_knn.py       ← k-NN Cosine Similarity recommender
 ├── 02_build_vectorstore.py   ← Embed lyrics into two ChromaDB stores
 ├── 03_rag_pipeline.py        ← RAG pipeline + evaluation + explanation
@@ -83,12 +81,7 @@ source venv/bin/activate       # Linux / macOS
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Get a free Genius API token
-# → https://genius.com/api-clients  (create an account, make an API client)
-# Create a .env file:
-echo "GENIUS_TOKEN=your_token_here" > .env
-
-# 4. Pull an Ollama model (used as the LLM)
+# 3. Pull an Ollama model (used as the LLM)
 ollama pull mistral
 ```
 
@@ -115,10 +108,7 @@ ollama pull mistral
 ## Run order
 
 ```bash
-# Step 1 — Collect lyrics
-python 01_collect_lyrics.py
-
-# Step 1b — Run k-NN baseline
+# Step 1 — Run k-NN baseline
 python 01b_baseline_knn.py
 
 # Step 2 — Build vector stores (both embedding models)

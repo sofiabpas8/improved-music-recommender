@@ -1,6 +1,6 @@
 # Core
-lyricsgenius
-python-dotenv
+pandas
+numpy
 
 # LangChain stack
 langchain
@@ -18,8 +18,6 @@ sentence-transformers     # for HuggingFace local models
 
 # k-NN baseline
 scikit-learn
-pandas
-numpy
 
 # ── Optional — uncomment depending on your chosen embedding models ──────────
 # langchain-openai          # for OpenAI embeddings or GPT models

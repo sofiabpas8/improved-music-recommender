@@ -36,14 +36,13 @@ TODO — Choose and configure your two embedding models
 """
 
 import os
-import json
-import glob
+import pandas as pd
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SONGS_DIR    = "data/songs"
+DATASET_PATH = "data/songs_dataset.csv"   # ← same CSV used by the k-NN baseline
 CHROMA_DIR_A = "data/chroma_db_model_a"
 CHROMA_DIR_B = "data/chroma_db_model_b"
 
@@ -68,27 +67,30 @@ EMBEDDING_A_NAME = "MODEL_A"  # ← TODO: set a short descriptive name, e.g. "Mi
 embeddings_b = None  # ← TODO: replace with your Model B instantiation
 EMBEDDING_B_NAME = "MODEL_B"  # ← TODO: set a short descriptive name, e.g. "OpenAI-text-embedding-3-small"
 
-# ── Load lyrics ───────────────────────────────────────────────────────────────
-documents = []
-for filepath in glob.glob(os.path.join(SONGS_DIR, "*.json")):
-    with open(filepath, "r", encoding="utf-8") as f:
-        song = json.load(f)
+# ── Load lyrics from CSV ──────────────────────────────────────────────────────
+# The CSV must have at minimum: title, artist, lyrics
+# Any additional numeric columns (audio features) are ignored here —
+# they are used only by the k-NN baseline in 01b_baseline_knn.py.
 
+if not os.path.exists(DATASET_PATH):
+    raise FileNotFoundError(
+        f"\nDataset not found at '{DATASET_PATH}'.\n"
+        "Please add your CSV file before running this script.\n"
+        "Required columns: title, artist, lyrics (plus any numeric feature columns)"
+    )
+
+df = pd.read_csv(DATASET_PATH)
+
+documents = []
+for _, row in df.iterrows():
     doc = Document(
-        page_content=song["lyrics"],
+        page_content=str(row["lyrics"]),
         metadata={
-            "title":  song["title"].lower(),
-            "artist": song["artist"].lower(),
-            "source": filepath,
+            "title":  str(row["title"]).lower(),
+            "artist": str(row["artist"]).lower(),
         },
     )
     documents.append(doc)
-
-if not documents:
-    raise RuntimeError(
-        f"No song files found in '{SONGS_DIR}/'. "
-        "Run 01_collect_lyrics.py first."
-    )
 
 print(f"Loaded {len(documents)} songs.")
 
