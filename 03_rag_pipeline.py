@@ -5,39 +5,32 @@ This script runs TWO RAG recommender models (one per embedding type built in
 Step 2) and compares their results against the k-NN cosine baseline from
 Step 1b.
 
+How it works
+────────────
+  1. The user provides a song title and artist.
+  2. The retriever searches the vector store for the most lyrically similar
+     songs using the embedding model.
+  3. The LLM reads the retrieved lyrics and:
+       (a) Picks the single best recommendation from the retrieved songs.
+       (b) Explains in natural language why that song is similar to the
+           input — shared themes, mood, lyrical style, etc.
+
 Architecture
 ────────────
-  User query
-      │
-      ├─► k-NN Cosine Baseline (01b_baseline_knn.py)
+  User query (song title + artist)
       │
       ├─► RAG Model A  →  ChromaDB A  →  Retriever A  →┐
-      │                                                  ├─► LLM (Ollama / API)
+      │     (Embedding type A on lyrics)                 ├─► Shared LLM ──► Recommended song
+      │                                                  │                  + explanation
       └─► RAG Model B  →  ChromaDB B  →  Retriever B  →┘
-                                                         │
-                                                         └─► Conversational answer
-                                                             (song name + natural-
-                                                              language explanation)
+            (Embedding type B on lyrics)
 
 Design decision — where does the LLM live?
 ──────────────────────────────────────────
-  The LLM is shared across both RAG models and the baseline. You do NOT need
-  a separate LLM for "adding the natural language part"; the same model that
-  evaluates retrieved context can also produce the conversational explanation.
-
-  The prompt template below instructs the LLM to:
-    1. Recommend a specific song from the retrieved results.
-    2. Explain in plain language WHY that song was recommended
-       (shared mood, lyrical themes, sonic qualities, etc.)
-
-  This means the embedding model and the LLM are two distinct components:
-    · Embedding model → encodes lyrics into vectors for retrieval
-    · LLM             → reads retrieved lyrics + user query and writes the
-                        explanation in natural language
-
-  You only need one LLM. What changes between Model A and Model B is the
-  embedding used for retrieval; the LLM and the prompt stay the same so
-  that the comparison is fair.
+  The LLM sits after retrieval, not inside the embedding layer. The embedding
+  model handles vector search; the LLM reads the retrieved lyrics and writes
+  the recommendation and explanation. One LLM is shared across both models so
+  the comparison between embeddings is fair.
 
 TODO — configure the LLM and embedding models before running.
 """
@@ -50,15 +43,14 @@ from langchain_ollama import OllamaLLM
 # ── Config ────────────────────────────────────────────────────────────────────
 CHROMA_DIR_A  = "data/chroma_db_model_a"
 CHROMA_DIR_B  = "data/chroma_db_model_b"
-DATASET_PATH  = "data/eval_dataset.json"
-OLLAMA_MODEL  = "mistral"   # ← change to any locally available Ollama model
 RESULTS_PATH  = "data/rag_results.json"
-TOP_K         = 3           # chunks to retrieve per query
+OLLAMA_MODEL  = "mistral"   # ← change to any locally available Ollama model
+TOP_K         = 1          # number of candidate songs to retrieve (1 for fastest evaluation from users)
 
 os.makedirs("data", exist_ok=True)
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
-# A single LLM is reused for both RAG models and the baseline.
+# A single LLM is reused for both RAG models so the comparison is fair.
 # Using a local Ollama model by default (no API key needed).
 # To swap in an API-based model:
 #   from langchain_openai import ChatOpenAI
@@ -85,41 +77,84 @@ embeddings_b = None  # ← TODO
 EMBEDDING_B_NAME = "MODEL_B"  # ← TODO
 
 # ── Prompt template ───────────────────────────────────────────────────────────
-# The LLM receives retrieved song lyrics as context and must:
-#   (a) answer the multiple-choice question, AND
-#   (b) produce a short conversational explanation.
+# The retriever finds the most lyrically similar songs.
+# The LLM then picks the best one and explains why it matches the input song.
 PROMPT_TEMPLATE = """\
-You are a music expert and recommender assistant.
+You are a music recommendation assistant.
 
-You have been asked about the following song:
+The user is looking for songs similar to:
   Song   : {song}
   Artist : {artist}
 
-Here are lyrics from similar songs retrieved from our catalog:
+Below are lyrics from candidate songs retrieved from our catalog:
 ──────────────────────────────────────────────────────────────
 {context}
 ──────────────────────────────────────────────────────────────
 
-Question: {question}
-Options:
-  A) {option_a}
-  B) {option_b}
-  C) {option_c}
-  D) {option_d}
-
 Instructions:
-  1. On the FIRST line write ONLY the letter of the correct answer (A, B, C or D).
-  2. On the SECOND line write a short, friendly explanation (2–4 sentences) of why
-     the retrieved songs are similar to '{song}' — mention shared themes, mood, or
-     lyrical style. Write as if you are talking directly to the user.
+  1. On the FIRST line write ONLY the title and artist of the ONE song from
+     the candidates above that is most similar to "{song}" by {artist}.
+     Format: Song Title — Artist Name
+  2. From the SECOND line onward write a short, friendly explanation (3–5
+     sentences) of why you recommend that song — mention shared lyrical themes,
+     mood, imagery, or style. Write as if you are talking directly to the user.
 
-Answer:\
+Recommendation:\
 """
 
-# ── Evaluation helpers ────────────────────────────────────────────────────────
+# ── Recommender ───────────────────────────────────────────────────────────────
 
-def run_rag_model(name: str, embeddings, chroma_dir: str, dataset: list) -> dict:
-    """Run a full RAG evaluation for one embedding model."""
+def recommend(song: str, artist: str, name: str, embeddings, chroma_dir: str) -> dict:
+    """Run a single recommendation for one embedding model."""
+    vectorstore = Chroma(
+        persist_directory=chroma_dir,
+        embedding_function=embeddings,
+    )
+
+    # Retrieve similar songs, excluding the input song itself
+    retriever = vectorstore.as_retriever(
+        search_kwargs={
+            "k": TOP_K,
+            "filter": {"title": {"$ne": song.lower()}},
+        }
+    )
+    query = f"{song} by {artist}"
+    docs = retriever.invoke(query)
+
+    # Build context block: label each chunk with its song title and artist
+    context_parts = []
+    for doc in docs:
+        label = f"[{doc.metadata.get('title', '?').title()} — {doc.metadata.get('artist', '?').title()}]"
+        context_parts.append(f"{label}\n{doc.page_content}")
+    context = "\n\n".join(context_parts)
+
+    prompt = PROMPT_TEMPLATE.format(
+        song=song,
+        artist=artist,
+        context=context,
+    )
+
+    raw = llm.invoke(prompt).strip()
+    lines = [l.strip() for l in raw.splitlines() if l.strip()]
+
+    recommended_song = lines[0] if lines else "(no recommendation generated)"
+    explanation      = " ".join(lines[1:]) if len(lines) > 1 else "(no explanation generated)"
+
+    return {
+        "model":            name,
+        "input_song":       song,
+        "input_artist":     artist,
+        "recommended_song": recommended_song,
+        "explanation":      explanation,
+        "retrieved_candidates": [
+            f"{d.metadata.get('title', '?').title()} — {d.metadata.get('artist', '?').title()}"
+            for d in docs
+        ],
+    }
+
+
+def run_rag_model(name: str, embeddings, chroma_dir: str, queries: list) -> dict:
+    """Run recommendations for a list of input songs with one embedding model."""
     if embeddings is None:
         print(f"\n⚠  Skipping {name} — embedding model not configured (see TODO above).")
         return {}
@@ -129,94 +164,46 @@ def run_rag_model(name: str, embeddings, chroma_dir: str, dataset: list) -> dict
         print("   Run 02_build_vectorstore.py first.")
         return {}
 
-    print(f"\n{'='*50}")
-    print(f"  Running RAG Model: {name}")
-    print(f"{'='*50}")
-
-    vectorstore = Chroma(
-        persist_directory=chroma_dir,
-        embedding_function=embeddings,
-    )
+    print(f"\n{'='*55}")
+    print(f"  RAG Model: {name}")
+    print(f"{'='*55}")
 
     results = []
-    correct = 0
+    for q in queries:
+        song   = q["song"]
+        artist = q["artist"]
+        print(f"\n  🎵 Input: {song} — {artist}")
 
-    for item in dataset:
-        query = f"{item['song']} by {item['artist']}: {item['question']}"
+        result = recommend(song, artist, name, embeddings, chroma_dir)
+        if result:
+            print(f"  ✅ Recommended : {result['recommended_song']}")
+            print(f"  💬 Explanation : {result['explanation']}")
+            results.append(result)
 
-        retriever = vectorstore.as_retriever(
-            search_kwargs={
-                "k": TOP_K,
-                "filter": {"title": item["song"].lower()},
-            }
-        )
-        docs = retriever.invoke(query)
-        context = "\n\n".join([d.page_content for d in docs])
-
-        prompt = PROMPT_TEMPLATE.format(
-            song=item["song"],
-            artist=item["artist"],
-            context=context,
-            question=item["question"],
-            option_a=item["options"]["A"],
-            option_b=item["options"]["B"],
-            option_c=item["options"]["C"],
-            option_d=item["options"]["D"],
-        )
-
-        raw = llm.invoke(prompt).strip()
-        lines = [l.strip() for l in raw.splitlines() if l.strip()]
-
-        predicted    = lines[0][0].upper() if lines and lines[0][0].upper() in "ABCD" else "?"
-        explanation  = lines[1] if len(lines) > 1 else "(no explanation generated)"
-        is_correct   = predicted == item["answer"]
-        if is_correct:
-            correct += 1
-
-        result = {
-            "id":               item["id"],
-            "song":             item["song"],
-            "question":         item["question"],
-            "expected":         item["answer"],
-            "predicted":        predicted,
-            "correct":          is_correct,
-            "explanation":      explanation,
-            "retrieved_sources": [d.metadata.get("title") for d in docs],
-        }
-        results.append(result)
-
-        status = "✓" if is_correct else "✗"
-        print(f"  [{status}] Q{item['id']} ({item['song']}): expected={item['answer']}, got={predicted}")
-        print(f"       💬 {explanation}\n")
-
-    accuracy = correct / len(dataset) * 100
-    print(f"\n  Accuracy ({name}): {correct}/{len(dataset)} = {accuracy:.1f}%")
-    return {"model": name, "accuracy": accuracy, "results": results}
+    return {"model": name, "results": results}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-with open(DATASET_PATH, "r") as f:
-    dataset = json.load(f)
+# Define the songs you want recommendations for.
+# Each entry needs a "song" title and "artist" name that exist in your dataset.
+QUERIES = [
+    {"song": "Bohemian Rhapsody", "artist": "Queen"},
+    # Add more songs here as needed:
+    # {"song": "Blinding Lights", "artist": "The Weeknd"},
+]
 
 all_results = []
 
-result_a = run_rag_model(EMBEDDING_A_NAME, embeddings_a, CHROMA_DIR_A, dataset)
+result_a = run_rag_model(EMBEDDING_A_NAME, embeddings_a, CHROMA_DIR_A, QUERIES)
 if result_a:
     all_results.append(result_a)
 
-result_b = run_rag_model(EMBEDDING_B_NAME, embeddings_b, CHROMA_DIR_B, dataset)
+result_b = run_rag_model(EMBEDDING_B_NAME, embeddings_b, CHROMA_DIR_B, QUERIES)
 if result_b:
     all_results.append(result_b)
 
-# ── Summary comparison ────────────────────────────────────────────────────────
+# ── Save results ──────────────────────────────────────────────────────────────
 if all_results:
-    print(f"\n{'='*50}")
-    print("  SUMMARY — Model Comparison")
-    print(f"{'='*50}")
-    for r in all_results:
-        print(f"  {r['model']:30s}  →  {r['accuracy']:.1f}% accuracy")
-    print()
-
     with open(RESULTS_PATH, "w") as f:
-        json.dump(all_results, f, indent=2)
-    print(f"Results saved to '{RESULTS_PATH}'")
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
+    print(f"\n\nResults saved to '{RESULTS_PATH}'")

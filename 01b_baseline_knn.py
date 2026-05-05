@@ -14,7 +14,7 @@ Compared to the original project:
 Dataset
 -------
 The original project used the Million Song Dataset (MSD) summary file.
-That dataset has been replaced with a custom CSV file that you will provide.
+That dataset has been replaced with a custom CSV file that needs to be provided.
 
 Expected CSV format (place the file at data/songs_dataset.csv):
 
@@ -25,6 +25,7 @@ Expected CSV format (place the file at data/songs_dataset.csv):
   - All remaining columns must be numeric audio features
     (e.g. tempo, energy, danceability, valence, loudness, etc.)
   - There is no restriction on the number of feature columns.
+  - A lyrics feature will also be included
 
 TODO: Add your dataset at  data/songs_dataset.csv  before running this script.
 """
@@ -37,7 +38,7 @@ from sklearn.preprocessing import StandardScaler
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DATASET_PATH = "data/songs_dataset.csv"   # ← Place your CSV here
-TOP_K = 5                                  # Number of recommendations to return
+TOP_K = 1                                  # Number of recommendations to return (1 for now for fastest evaluation from users)
 
 # ── Load dataset ──────────────────────────────────────────────────────────────
 # TODO: Replace with your own dataset.
