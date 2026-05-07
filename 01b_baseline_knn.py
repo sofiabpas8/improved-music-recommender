@@ -38,7 +38,7 @@ from sklearn.preprocessing import StandardScaler
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DATASET_PATH = "data/songs_dataset.csv"   # ← Place your CSV here
-TOP_K = 1                                  # Number of recommendations to return (1 for now for fastest evaluation from users)
+TOP_K = 10                                  # Number of recommendations to return (1 for now for fastest evaluation from users)
 
 # ── Load dataset ──────────────────────────────────────────────────────────────
 # TODO: Replace with your own dataset.
@@ -54,20 +54,34 @@ if not os.path.exists(DATASET_PATH):
 
 df = pd.read_csv(DATASET_PATH)
 
+# Drop duplicates to avoid repeated recommended songs
+df = df.drop_duplicates(subset=["track_name", "track_artist"])
+
 # Separate metadata from numeric features
-META_COLS = ["title", "artist"]
-feature_cols = [c for c in df.columns if c not in META_COLS]
+META_COLS = ["track_name", "track_artist"]
+# Audio feature columns
+feature_cols = [
+    "danceability",
+    "energy",
+    "key",
+    "loudness",
+    "mode",
+    "speechiness",
+    "acousticness",
+    "instrumentalness",
+    "liveness",
+    "valence",
+    "tempo"
+]
 
 print(f"Loaded {len(df)} songs with features: {feature_cols}")
 
-# ── Normalise features ────────────────────────────────────────────────────────
-# StandardScaler ensures all features contribute equally before computing cosine.
+# ── Normalize features ────────────────────────────────────────────────────────
 scaler = StandardScaler()
 features = scaler.fit_transform(df[feature_cols].fillna(0))
 
-
 # ── k-NN Recommender (Cosine Similarity only) ─────────────────────────────────
-def recommend(target_title: str, target_artist: str = None, k: int = TOP_K):
+def recommend(target_title, target_artist=None, k=TOP_K):
     """
     Find the k most similar songs to the target using Cosine Similarity.
 
@@ -76,42 +90,47 @@ def recommend(target_title: str, target_artist: str = None, k: int = TOP_K):
     target_title  : exact song title (case-insensitive)
     target_artist : optional artist filter to resolve duplicates
     k             : number of recommendations to return
+    mask = df["track_name"].str.lower() == target_title.lower()
 
     Returns
     -------
     DataFrame with columns [title, artist, cosine_similarity]
     """
-    # Locate target song
-    mask = df["title"].str.lower() == target_title.lower()
+    mask = df["track_name"].str.lower() == target_title.lower()
+
     if target_artist:
-        mask &= df["artist"].str.lower() == target_artist.lower()
+        mask &= (
+            df["track_artist"].str.lower()
+            == target_artist.lower()
+        )
 
     if mask.sum() == 0:
-        raise ValueError(f"Song '{target_title}' not found in dataset.")
-    if mask.sum() > 1:
-        print(f"Multiple matches for '{target_title}'. Using the first one.")
+        raise ValueError(f"Song '{target_title}' not found.")
 
     target_idx = df[mask].index[0]
+
     target_vec = features[target_idx].reshape(1, -1)
 
-    # Compute cosine similarity against the full catalog
     similarities = cosine_similarity(target_vec, features)[0]
 
-    # Build results — exclude the target song itself
     results = df[META_COLS].copy()
     results["cosine_similarity"] = similarities
+
+    # Remove the target song itself
     results = results.drop(index=target_idx)
+
+    # Sort by similarity
     results = results.sort_values("cosine_similarity", ascending=False).head(k)
 
     return results.reset_index(drop=True)
 
-
 # ── Demo ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # TODO: change the song below to one that exists in your dataset
-    TARGET_SONG   = "Bohemian Rhapsody"
-    TARGET_ARTIST = "Queen"          # optional — set to None if not needed
 
-    print(f"\n🎵 Finding {TOP_K} songs similar to: {TARGET_SONG} — {TARGET_ARTIST}\n")
+    TARGET_SONG = "Shape of You"
+    TARGET_ARTIST = "Ed Sheeran"
+
     recs = recommend(TARGET_SONG, TARGET_ARTIST)
+
+    print("\nRecommendations:\n")
     print(recs.to_string(index=False))
