@@ -1,164 +1,229 @@
 """
-STEP 3 — RAG Recommendation Pipeline + Conversational Explanation
+STEP 3 — RAG Recommendation Pipeline with Late Fusion + Conversational Explanation
 
-This script runs TWO RAG recommender models (one per embedding type built in
-Step 2) and compares their results against the k-NN cosine baseline from
-Step 1b.
+Runs TWO RAG recommenders (one per embedding model from Step 2) and compares
+their results against the k-NN cosine baseline from Step 1b.
 
-How it works
-────────────
-  1. The user provides a song title and artist.
-  2. The retriever searches the vector store for the most lyrically similar
-     songs using the embedding model.
-  3. The LLM reads the retrieved lyrics and:
-       (a) Picks the single best recommendation from the retrieved songs.
-       (b) Explains in natural language why that song is similar to the
-           input — shared themes, mood, lyrical style, etc.
+Retrieval strategy — late fusion
+─────────────────────────────────
+  1. ChromaDB retrieves the top CANDIDATE_K songs by text similarity
+     (lyrics + metadata embeddings).
+  2. Audio cosine similarity is computed separately on the numeric feature
+     vectors for each candidate.
+  3. A combined score merges both signals:
+         score = ALPHA * audio_sim + (1 - ALPHA) * text_sim
+  4. Candidates are re-ranked by combined score; the top song is selected.
+
+LLM role — narration only
+──────────────────────────
+  The LLM receives the full profiles of both the input song and the
+  recommended song (metadata, audio features, lyrics) plus the similarity
+  scores, and generates a conversational explanation grounded in that data.
+  Ranking is handled entirely by the retrieval + fusion step; the LLM
+  does not re-rank.
 
 Architecture
 ────────────
   User query (song title + artist)
       │
-      ├─► RAG Model A  →  ChromaDB A  →  Retriever A  →┐
-      │     (Embedding type A on lyrics)                 ├─► Shared LLM ──► Recommended song
-      │                                                  │                  + explanation
-      └─► RAG Model B  →  ChromaDB B  →  Retriever B  →┘
-            (Embedding type B on lyrics)
-
-Design decision — where does the LLM live?
-──────────────────────────────────────────
-  The LLM sits after retrieval, not inside the embedding layer. The embedding
-  model handles vector search; the LLM reads the retrieved lyrics and writes
-  the recommendation and explanation. One LLM is shared across both models so
-  the comparison between embeddings is fair.
-
-TODO — configure the LLM and embedding models before running.
+      ├─► RAG Model A  →  ChromaDB A (MiniLM)  →  text_sim  ─┐
+      │                                                        ├─► late fusion ──► re-rank ──► LLM ──► explanation
+      └─► RAG Model B  →  ChromaDB B (mpnet)   →  text_sim  ─┘
+                                                   audio_sim ─┘  (shared, model-agnostic)
 """
 
 import json
 import os
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import StandardScaler
+
 from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CHROMA_DIR_A  = "data/chroma_db_model_a"
-CHROMA_DIR_B  = "data/chroma_db_model_b"
+DATASET_PATH  = "data/songs_dataset.csv"
+CHROMA_DIR_A  = "data/chroma_db_minilm"
+CHROMA_DIR_B  = "data/chroma_db_mpnet"
 RESULTS_PATH  = "data/rag_results.json"
-OLLAMA_MODEL  = "mistral"   # ← change to any locally available Ollama model
-TOP_K         = 1          # number of candidate songs to retrieve (1 for fastest evaluation from users)
+OLLAMA_MODEL  = "mistral"
+
+CANDIDATE_K   = 20    # songs retrieved from ChromaDB before re-ranking
+TOP_K         = 1     # final recommendations passed to the LLM
+ALPHA         = 0.5   # weight of audio similarity in combined score (0 = text only, 1 = audio only)
 
 os.makedirs("data", exist_ok=True)
 
-# ── LLM ───────────────────────────────────────────────────────────────────────
-# A single LLM is reused for both RAG models so the comparison is fair.
-# Using a local Ollama model by default (no API key needed).
-# To swap in an API-based model:
-#   from langchain_openai import ChatOpenAI
-#   llm = ChatOpenAI(model="gpt-4o-mini")
+# ── Embedding models (must match the ones used in Step 2) ─────────────────────
+embeddings_a     = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+EMBEDDING_A_NAME = "all-MiniLM-L6-v2"
+
+embeddings_b     = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+EMBEDDING_B_NAME = "all-mpnet-base-v2"
+
+# ── LLM (shared across both models for a fair comparison) ────────────────────
 llm = OllamaLLM(model=OLLAMA_MODEL)
 
-# ── Embedding models ──────────────────────────────────────────────────────────
-# TODO: Import and instantiate the SAME two embedding models you used in Step 2.
-#       The model instances here must match the ones used to build the stores,
-#       otherwise ChromaDB will reject the query vectors.
+# ── Audio features (for late fusion) ─────────────────────────────────────────
+AUDIO_COLS = [
+    "danceability", "energy", "key", "loudness", "mode",
+    "speechiness", "acousticness", "instrumentalness",
+    "liveness", "valence", "tempo",
+]
 
-# Model A — replace this block ↓
-# Example:
-#   from langchain_community.embeddings import HuggingFaceEmbeddings
-#   embeddings_a = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-embeddings_a = None  # ← TODO
-EMBEDDING_A_NAME = "MODEL_A"  # ← TODO: same name you used in 02_build_vectorstore.py
+df = pd.read_csv(DATASET_PATH)
+df = df.drop_duplicates(subset=["track_name", "track_artist"])
+df["_title_lower"]  = df["track_name"].str.lower().str.strip()
+df["_artist_lower"] = df["track_artist"].str.lower().str.strip()
 
-# Model B — replace this block ↓
-# Example:
-#   from langchain_openai import OpenAIEmbeddings
-#   embeddings_b = OpenAIEmbeddings(model="text-embedding-3-small")
-embeddings_b = None  # ← TODO
-EMBEDDING_B_NAME = "MODEL_B"  # ← TODO
+scaler       = StandardScaler()
+audio_matrix = scaler.fit_transform(df[AUDIO_COLS].fillna(0))
+
+
+def get_audio_vector(title: str, artist: str):
+    """Return the normalised audio feature vector for a song, or None if not found."""
+    mask = (df["_title_lower"] == title.lower().strip()) & \
+           (df["_artist_lower"] == artist.lower().strip())
+    if mask.sum() == 0:
+        mask = df["_title_lower"] == title.lower().strip()
+    if mask.sum() == 0:
+        return None
+    idx = df[mask].index[0]
+    return audio_matrix[df.index.get_loc(idx)].reshape(1, -1)
+
 
 # ── Prompt template ───────────────────────────────────────────────────────────
-# The retriever finds the most lyrically similar songs.
-# The LLM then picks the best one and explains why it matches the input song.
 PROMPT_TEMPLATE = """\
-You are a music recommendation assistant.
+You are a music recommendation assistant. Your task is to explain why a \
+recommended song is a good match for the user's input song.
 
-The user is looking for songs similar to:
-  Song   : {song}
-  Artist : {artist}
+You have been given the full profiles of both songs, including their lyrics, \
+genre, and audio characteristics. Ground your explanation in this data — do \
+not invent information.
 
-Below are lyrics from candidate songs retrieved from our catalog:
-──────────────────────────────────────────────────────────────
-{context}
-──────────────────────────────────────────────────────────────
+━━━ INPUT SONG ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{input_profile}
 
-Instructions:
-  1. On the FIRST line write ONLY the title and artist of the ONE song from
-     the candidates above that is most similar to "{song}" by {artist}.
-     Format: Song Title — Artist Name
-  2. From the SECOND line onward write a short, friendly explanation (3–5
-     sentences) of why you recommend that song — mention shared lyrical themes,
-     mood, imagery, or style. Write as if you are talking directly to the user.
+━━━ RECOMMENDED SONG ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{recommended_profile}
 
-Recommendation:\
+━━━ SIMILARITY SCORES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Audio similarity : {audio_sim:.3f}  (how similar the sonic/musical features are)
+  Text similarity  : {text_sim:.3f}  (how similar the lyrics and metadata are)
+  Combined score   : {combined:.3f}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Write a short, friendly explanation (3–5 sentences) of why the recommended \
+song is a great match. Mention specific shared elements — lyrical themes, \
+mood, genre, or audio qualities — drawing directly from the profiles above.\
 """
 
-# ── Recommender ───────────────────────────────────────────────────────────────
 
-def recommend(song: str, artist: str, name: str, embeddings, chroma_dir: str) -> dict:
-    """Run a single recommendation for one embedding model."""
+def build_song_profile(title: str, artist: str, doc_content: str,
+                       audio_vec) -> str:
+    """Format a song's full profile for the prompt."""
+    lines = [doc_content.strip()]
+    if audio_vec is not None:
+        # Reconstruct readable audio features from the original (unscaled) row
+        mask = (df["_title_lower"] == title.lower().strip())
+        if mask.sum() > 0:
+            row = df[mask].iloc[0]
+            audio_str = "  |  ".join(
+                f"{col}: {row[col]:.3f}" for col in AUDIO_COLS if col in df.columns
+            )
+            lines.append(f"Audio features: {audio_str}")
+    return "\n".join(lines)
+
+
+# ── Recommender ───────────────────────────────────────────────────────────────
+def recommend(song: str, artist: str, name: str,
+              embeddings, chroma_dir: str) -> dict:
+    """Run late-fusion retrieval + LLM explanation for one embedding model."""
+
     vectorstore = Chroma(
         persist_directory=chroma_dir,
         embedding_function=embeddings,
     )
 
-    # Retrieve similar songs, excluding the input song itself
-    retriever = vectorstore.as_retriever(
-        search_kwargs={
-            "k": TOP_K,
-            "filter": {"title": {"$ne": song.lower()}},
-        }
-    )
+    # ── 1. Retrieve top CANDIDATE_K by text similarity ────────────────────────
     query = f"{song} by {artist}"
-    docs = retriever.invoke(query)
+    results_with_scores = vectorstore.similarity_search_with_relevance_scores(
+        query,
+        k=CANDIDATE_K,
+        filter={"title": {"$ne": song.lower()}},
+    )
 
-    # Build context block: label each chunk with its song title and artist
-    context_parts = []
-    for doc in docs:
-        label = f"[{doc.metadata.get('title', '?').title()} — {doc.metadata.get('artist', '?').title()}]"
-        context_parts.append(f"{label}\n{doc.page_content}")
-    context = "\n\n".join(context_parts)
+    if not results_with_scores:
+        return {}
+
+    # ── 2. Late fusion: combine text similarity with audio similarity ──────────
+    input_audio = get_audio_vector(song, artist)
+
+    fused = []
+    for doc, text_sim in results_with_scores:
+        cand_title  = doc.metadata.get("title", "")
+        cand_artist = doc.metadata.get("artist", "")
+        cand_audio  = get_audio_vector(cand_title, cand_artist)
+
+        if input_audio is not None and cand_audio is not None:
+            audio_sim = float(cosine_similarity(input_audio, cand_audio)[0][0])
+            audio_sim = max(0.0, audio_sim)   # cosine can be slightly negative
+        else:
+            audio_sim = 0.0
+
+        combined = ALPHA * audio_sim + (1 - ALPHA) * text_sim
+        fused.append((doc, text_sim, audio_sim, combined))
+
+    # ── 3. Re-rank by combined score ──────────────────────────────────────────
+    fused.sort(key=lambda x: x[3], reverse=True)
+    top = fused[:TOP_K]
+
+    # ── 4. Look up input song's document for the prompt ───────────────────────
+    input_docs = vectorstore.similarity_search(
+        query,
+        k=1,
+        filter={"title": song.lower()},
+    )
+    input_doc_content = input_docs[0].page_content if input_docs else f"Song: {song}\nArtist: {artist}"
+    input_audio_vec   = get_audio_vector(song, artist)
+    input_profile     = build_song_profile(song, artist, input_doc_content, input_audio_vec)
+
+    # ── 5. Build prompt and call LLM ──────────────────────────────────────────
+    best_doc, best_text_sim, best_audio_sim, best_combined = top[0]
+    rec_title   = best_doc.metadata.get("title", "?").title()
+    rec_artist  = best_doc.metadata.get("artist", "?").title()
+    rec_audio   = get_audio_vector(rec_title, rec_artist)
+    rec_profile = build_song_profile(rec_title, rec_artist, best_doc.page_content, rec_audio)
 
     prompt = PROMPT_TEMPLATE.format(
-        song=song,
-        artist=artist,
-        context=context,
+        input_profile     = input_profile,
+        recommended_profile = rec_profile,
+        audio_sim         = best_audio_sim,
+        text_sim          = best_text_sim,
+        combined          = best_combined,
     )
 
-    raw = llm.invoke(prompt).strip()
-    lines = [l.strip() for l in raw.splitlines() if l.strip()]
-
-    recommended_song = lines[0] if lines else "(no recommendation generated)"
-    explanation      = " ".join(lines[1:]) if len(lines) > 1 else "(no explanation generated)"
+    explanation = llm.invoke(prompt).strip()
 
     return {
         "model":            name,
         "input_song":       song,
         "input_artist":     artist,
-        "recommended_song": recommended_song,
+        "recommended_song": f"{rec_title} — {rec_artist}",
+        "audio_similarity": round(best_audio_sim, 4),
+        "text_similarity":  round(best_text_sim, 4),
+        "combined_score":   round(best_combined, 4),
         "explanation":      explanation,
-        "retrieved_candidates": [
-            f"{d.metadata.get('title', '?').title()} — {d.metadata.get('artist', '?').title()}"
-            for d in docs
-        ],
     }
 
 
-def run_rag_model(name: str, embeddings, chroma_dir: str, queries: list) -> dict:
-    """Run recommendations for a list of input songs with one embedding model."""
-    if embeddings is None:
-        print(f"\n⚠  Skipping {name} — embedding model not configured (see TODO above).")
-        return {}
-
+def run_rag_model(name: str, embeddings, chroma_dir: str,
+                  queries: list) -> dict:
+    """Run recommendations for a list of queries with one embedding model."""
     if not os.path.exists(chroma_dir):
         print(f"\n⚠  Skipping {name} — vector store not found at '{chroma_dir}'.")
         print("   Run 02_build_vectorstore.py first.")
@@ -177,18 +242,18 @@ def run_rag_model(name: str, embeddings, chroma_dir: str, queries: list) -> dict
         result = recommend(song, artist, name, embeddings, chroma_dir)
         if result:
             print(f"  ✅ Recommended : {result['recommended_song']}")
-            print(f"  💬 Explanation : {result['explanation']}")
+            print(f"     audio={result['audio_similarity']:.3f}  "
+                  f"text={result['text_similarity']:.3f}  "
+                  f"combined={result['combined_score']:.3f}")
+            print(f"  💬 {result['explanation'][:120]}…")
             results.append(result)
 
     return {"model": name, "results": results}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-# Define the songs you want recommendations for.
-# Each entry needs a "song" title and "artist" name that exist in your dataset.
 QUERIES = [
     {"song": "Bohemian Rhapsody", "artist": "Queen"},
-    # Add more songs here as needed:
     # {"song": "Blinding Lights", "artist": "The Weeknd"},
 ]
 
@@ -202,7 +267,6 @@ result_b = run_rag_model(EMBEDDING_B_NAME, embeddings_b, CHROMA_DIR_B, QUERIES)
 if result_b:
     all_results.append(result_b)
 
-# ── Save results ──────────────────────────────────────────────────────────────
 if all_results:
     with open(RESULTS_PATH, "w") as f:
         json.dump(all_results, f, indent=2, ensure_ascii=False)
