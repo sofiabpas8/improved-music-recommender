@@ -34,94 +34,127 @@ TODO — Choose and configure your two embedding models
   You can also experiment with domain-specific or multilingual models.
   Document your choice and rationale in README.md.
 """
-
 import os
 import pandas as pd
+
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DATASET_PATH = "data/songs_dataset.csv"   # ← same CSV used by the k-NN baseline
-CHROMA_DIR_A = "data/chroma_db_model_a"
-CHROMA_DIR_B = "data/chroma_db_model_b"
+DATASET_PATH = "data/songs_dataset.csv"
 
-CHUNK_SIZE    = 1000
-CHUNK_OVERLAP = 100
+CHROMA_DIR_A = "data/chroma_db_minilm"
+CHROMA_DIR_B = "data/chroma_db_mpnet"
 
-# ── Embedding models ──────────────────────────────────────────────────────────
-# TODO: Import and instantiate your two chosen embedding models here.
-#       Delete the two NotImplementedError lines once you have done so.
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
 
-# Model A — replace this block ↓
-# Example:
-#   from langchain_community.embeddings import HuggingFaceEmbeddings
-#   embeddings_a = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-embeddings_a = None  # ← TODO: replace with your Model A instantiation
-EMBEDDING_A_NAME = "MODEL_A"  # ← TODO: set a short descriptive name, e.g. "MiniLM-L6-v2"
+# ── HuggingFace Embedding Models ─────────────────────────────────────────────
+# Model A — Fast and lightweight
+embeddings_a = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
 
-# Model B — replace this block ↓
-# Example:
-#   from langchain_openai import OpenAIEmbeddings
-#   embeddings_b = OpenAIEmbeddings(model="text-embedding-3-small")
-embeddings_b = None  # ← TODO: replace with your Model B instantiation
-EMBEDDING_B_NAME = "MODEL_B"  # ← TODO: set a short descriptive name, e.g. "OpenAI-text-embedding-3-small"
+EMBEDDING_A_NAME = "all-MiniLM-L6-v2"
 
-# ── Load lyrics from CSV ──────────────────────────────────────────────────────
-# The CSV must have at minimum: title, artist, lyrics
-# Any additional numeric columns (audio features) are ignored here —
-# they are used only by the k-NN baseline in 01b_baseline_knn.py.
+# Model B — Larger and more accurate
+embeddings_b = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-mpnet-base-v2"
+)
 
+EMBEDDING_B_NAME = "all-mpnet-base-v2"
+
+# ── Load Dataset ──────────────────────────────────────────────────────────────
 if not os.path.exists(DATASET_PATH):
     raise FileNotFoundError(
-        f"\nDataset not found at '{DATASET_PATH}'.\n"
-        "Please add your CSV file before running this script.\n"
-        "Required columns: title, artist, lyrics (plus any numeric feature columns)"
+        f"\nDataset not found at '{DATASET_PATH}'."
     )
 
 df = pd.read_csv(DATASET_PATH)
 
+# Remove duplicate songs
+df = df.drop_duplicates(
+    subset=["track_name", "track_artist"]
+)
+
+# Fill missing text fields
+text_cols = [
+    "track_name",
+    "track_artist",
+    "playlist_genre",
+    "playlist_subgenre",
+    "track_album_name",
+]
+
+for col in text_cols:
+    df[col] = df[col].fillna("")
+
+# ── Create Documents ──────────────────────────────────────────────────────────
 documents = []
+
 for _, row in df.iterrows():
+
+    # Create semantic text for embeddings
+    content = f"""
+    Song: {row['track_name']}
+    Artist: {row['track_artist']}
+    Album: {row['track_album_name']}
+    Genre: {row['playlist_genre']}
+    Subgenre: {row['playlist_subgenre']}
+    """
+
     doc = Document(
-        page_content=str(row["lyrics"]),
+        page_content=content,
         metadata={
-            "title":  str(row["title"]).lower(),
-            "artist": str(row["artist"]).lower(),
+            "title": str(row["track_name"]).lower(),
+            "artist": str(row["track_artist"]).lower(),
         },
     )
+
     documents.append(doc)
 
 print(f"Loaded {len(documents)} songs.")
 
-# ── Split into chunks ─────────────────────────────────────────────────────────
+# ── Split Documents ───────────────────────────────────────────────────────────
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
     chunk_overlap=CHUNK_OVERLAP,
 )
+
 chunks = splitter.split_documents(documents)
+
 print(f"Split into {len(chunks)} chunks.")
 
-
-# ── Helper: build and persist one vector store ────────────────────────────────
+# ── Helper Function ───────────────────────────────────────────────────────────
 def build_vectorstore(embeddings, chroma_dir: str, name: str):
-    if embeddings is None:
-        print(f"\n⚠  Skipping {name} — embedding model not configured yet (see TODO above).")
-        return
 
-    print(f"\nBuilding vector store for {name} → {chroma_dir} ...")
+    print(f"\nBuilding vector store for {name}...")
+
     os.makedirs(chroma_dir, exist_ok=True)
+
     vectorstore = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
         persist_directory=chroma_dir,
     )
+
     vectorstore.persist()
-    print(f"✓ {name} vector store saved to '{chroma_dir}/'")
 
+    print(f"✓ Saved vector store to '{chroma_dir}'")
 
-# ── Build both stores ─────────────────────────────────────────────────────────
-build_vectorstore(embeddings_a, CHROMA_DIR_A, EMBEDDING_A_NAME)
-build_vectorstore(embeddings_b, CHROMA_DIR_B, EMBEDDING_B_NAME)
+# ── Build Both Vector Stores ──────────────────────────────────────────────────
+build_vectorstore(
+    embeddings_a,
+    CHROMA_DIR_A,
+    EMBEDDING_A_NAME,
+)
 
-print("\nDone! Run 03_rag_pipeline.py to evaluate both models.")
+build_vectorstore(
+    embeddings_b,
+    CHROMA_DIR_B,
+    EMBEDDING_B_NAME,
+)
+
+print("\nDone! Both HuggingFace vector stores were created successfully.")
