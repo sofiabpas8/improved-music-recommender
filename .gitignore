@@ -2,7 +2,12 @@
 venv/
 __pycache__/
 data/songs/
-data/chroma_db_model_a/
-data/chroma_db_model_b/
-data/songs_dataset.csv
+data/chroma_db_minilm/
+data/chroma_db_mpnet/
+data/audio_matrix.npy
+data/audio_scaler.joblib
+data/tfidf_matrix.npz
+data/tfidf_vectorizer.joblib
+data/rag_results.json
+improved-music-rec/
 *.pyc
