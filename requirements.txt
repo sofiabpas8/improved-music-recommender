@@ -20,7 +20,7 @@ sentence-transformers     # for HuggingFace local models
 scikit-learn
 
 # ── Optional — uncomment depending on your chosen embedding models ──────────
-langchain-openai          # for OpenAI embeddings or GPT models
-openai
-langchain-cohere          # for Cohere embeddings
-cohere
+#langchain-openai          # for OpenAI embeddings or GPT models
+#openai
+#langchain-cohere          # for Cohere embeddings
+#cohere
