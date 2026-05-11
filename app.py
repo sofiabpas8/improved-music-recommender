@@ -26,7 +26,7 @@ def download_data():
         local_dir="data/",
         token=hf_token,
         ignore_patterns=["*.gitattributes"],
-    )g
+    )
 
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
