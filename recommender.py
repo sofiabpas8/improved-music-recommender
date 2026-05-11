@@ -40,6 +40,7 @@ import joblib
 import os
 from dotenv import load_dotenv
 load_dotenv()
+import streamlit as st
 
 from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from langchain_chroma import Chroma
@@ -108,7 +109,8 @@ def load_models(use_llm: bool = True):
 
     if use_llm:
         print("Loading LLM...")
-        _llm = ChatGroq(model=GROQ_MODEL, api_key=os.environ.get("GROQ_API_KEY"))
+        api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+        _llm = ChatGroq(model=GROQ_MODEL, api_key=api_key)
     else:
         print("Skipping LLM (--no-llm mode). RAG explanations will be unavailable.")
 

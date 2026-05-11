@@ -5,8 +5,26 @@ Run with:
     streamlit run app.py
 """
 
+import os
 import streamlit as st
 import pandas as pd
+from huggingface_hub import snapshot_download
+
+
+# ── Data download (runs before anything else) ─────────────────────────────────
+def download_data():
+    """Download data folder from Hugging Face if not already present."""
+    if os.path.exists("data/songs_clean.csv"):
+        return  # already downloaded, skip
+
+    hf_token = st.secrets.get("HF_TOKEN") or os.environ.get("HF_TOKEN")
+    snapshot_download(
+        repo_id="cosita2000/music-recommender-data",
+        repo_type="dataset",
+        local_dir="data/",
+        token=hf_token,
+    )
+
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -240,7 +258,6 @@ p, label, div, span, input, button {
 def get_models():
     from recommender import load_models
     load_models(use_llm=True)
-    # Return a sentinel so we know it's done
     return True
 
 @st.cache_data(show_spinner=False)
@@ -260,9 +277,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── Model loading ─────────────────────────────────────────────────────────────
-with st.spinner("Loading models into memory — this takes about 30 seconds on first run..."):
+# ── Data download + model loading ─────────────────────────────────────────────
+with st.spinner("Downloading data and loading models — this takes about a minute on first run..."):
     try:
+        download_data()
         get_models()
     except Exception as e:
         st.markdown(f'<div class="error-box">⚠ Could not load models: {e}</div>', unsafe_allow_html=True)
@@ -320,9 +338,9 @@ if search_clicked:
                 results = None
 
         if results:
-            knn     = results.get("knn", {})
-            minilm  = results.get("rag_minilm", {})
-            mpnet   = results.get("rag_mpnet", {})
+            knn    = results.get("knn", {})
+            minilm = results.get("rag_minilm", {})
+            mpnet  = results.get("rag_mpnet", {})
 
             cards = [
                 ("k-NN Baseline",      "knn",    "card-knn",    "label-knn",    knn),
@@ -346,12 +364,12 @@ if search_clicked:
                         """, unsafe_allow_html=True)
                         continue
 
-                    rec_song   = data.get("recommended_song",   "—")
-                    rec_artist = data.get("recommended_artist", "—")
-                    audio_sim  = data.get("audio_similarity",   None)
-                    text_sim   = data.get("text_similarity",    None)
-                    combined   = data.get("combined_score",     None)
-                    explanation = data.get("explanation", "")
+                    rec_song    = data.get("recommended_song",   "—")
+                    rec_artist  = data.get("recommended_artist", "—")
+                    audio_sim   = data.get("audio_similarity",   None)
+                    text_sim    = data.get("text_similarity",    None)
+                    combined    = data.get("combined_score",     None)
+                    explanation = data.get("explanation",        "")
 
                     def pill(name, val):
                         if val is None:
