@@ -120,7 +120,7 @@ def load_models(use_llm: bool = True):
 
 def _check_loaded():
     if not _loaded:
-        raise RuntimeError("Call load_models() before recommend().")
+        load_models()
 
 
 def _lookup_song(title: str, artist: str):
