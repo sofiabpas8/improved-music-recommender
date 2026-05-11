@@ -13,23 +13,15 @@ from huggingface_hub import snapshot_download
 
 # ── Data download (runs before anything else) ─────────────────────────────────
 def download_data():
-    if os.path.exists("data/songs_clean.csv"):
-        return
+    if os.path.exists("data/audio_matrix.npy"):
+        return  # all files present, skip
 
     os.makedirs("data", exist_ok=True)
-    st.write("Starting download from Hugging Face...")
-    try:
-        snapshot_download(
-            repo_id="cosita2000/music-recommender-data",
-            repo_type="dataset",
-            local_dir="data/",
-        )
-        st.write("Download complete. Files in data/:")
-        st.write(os.listdir("data/"))
-    except Exception as e:
-        st.error(f"Download failed: {e}")
-        st.stop()
-
+    snapshot_download(
+        repo_id="cosita2000/music-recommender-data",
+        repo_type="dataset",
+        local_dir="data/",
+    )
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -283,9 +275,11 @@ st.markdown("""
 
 
 # ── Data download + model loading ─────────────────────────────────────────────
-with st.spinner("Downloading data and loading models — this takes about a minute on first run..."):
+with st.spinner("Downloading data from Hugging Face..."):
+    download_data()
+
+with st.spinner("Loading models into memory..."):
     try:
-        download_data()
         get_models()
     except Exception as e:
         st.markdown(f'<div class="error-box">⚠ Could not load models: {e}</div>', unsafe_allow_html=True)
