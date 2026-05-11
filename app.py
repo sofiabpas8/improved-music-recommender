@@ -397,6 +397,45 @@ if search_clicked:
                     """, unsafe_allow_html=True)
 
 
+# ── Questionnaire banner ──────────────────────────────────────────────────────
+st.markdown("""
+<div style="
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 2px;
+    padding: 1.4rem 2rem;
+    margin-top: 2.5rem;
+    text-align: center;
+">
+    <div style="
+        font-family: 'DM Mono', monospace;
+        font-size: 0.78rem;
+        color: rgba(232, 228, 220, 0.7);
+        margin-bottom: 0.6rem;
+        letter-spacing: 0.05em;
+    ">
+        After listening to the recommended songs, please complete this short questionnarie for our study. It will only take you a minute :)
+    </div>
+    <a href="https://docs.google.com/forms/d/1Gq3Um5lTD9RzqSEmw7NYLPV_VcmV9y-LzSeO8YpnU5k/viewform"
+       target="_blank"
+       style="
+           font-family: 'DM Mono', monospace;
+           font-size: 0.75rem;
+           font-weight: 500;
+           letter-spacing: 0.12em;
+           text-transform: uppercase;
+           color: #8b5cf6;
+           text-decoration: none;
+           border: 1px solid rgba(139, 92, 246, 0.4);
+           padding: 0.5rem 1.5rem;
+           border-radius: 2px;
+           transition: all 0.2s;
+       ">
+        Fill in the questionnaire →
+    </a>
+</div>
+""", unsafe_allow_html=True)
+
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="app-footer">
