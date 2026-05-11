@@ -17,11 +17,18 @@ def download_data():
         return
 
     os.makedirs("data", exist_ok=True)
-    snapshot_download(
-        repo_id="cosita2000/music-recommender-data",
-        repo_type="dataset",
-        local_dir="data/",
-    )
+    st.write("Starting download from Hugging Face...")
+    try:
+        snapshot_download(
+            repo_id="cosita2000/music-recommender-data",
+            repo_type="dataset",
+            local_dir="data/",
+        )
+        st.write("Download complete. Files in data/:")
+        st.write(os.listdir("data/"))
+    except Exception as e:
+        st.error(f"Download failed: {e}")
+        st.stop()
 
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
