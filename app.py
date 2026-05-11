@@ -13,19 +13,14 @@ from huggingface_hub import snapshot_download
 
 # ── Data download (runs before anything else) ─────────────────────────────────
 def download_data():
-    """Download data folder from Hugging Face if not already present."""
     if os.path.exists("data/songs_clean.csv"):
-        return  # already downloaded, skip
+        return
 
-    hf_token = st.secrets.get("HF_TOKEN") or os.environ.get("HF_TOKEN")
-    
     os.makedirs("data", exist_ok=True)
     snapshot_download(
         repo_id="cosita2000/music-recommender-data",
         repo_type="dataset",
         local_dir="data/",
-        token=hf_token,
-        ignore_patterns=["*.gitattributes"],
     )
 
 
