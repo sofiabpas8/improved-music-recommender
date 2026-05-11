@@ -37,17 +37,20 @@ import numpy as np
 import pandas as pd
 import scipy.sparse
 import joblib
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
 
 # ── Config ────────────────────────────────────────────────────────────────────
 CLEAN_PATH   = "data/songs_clean.csv"
 CHROMA_DIR_A = "data/chroma_db_minilm"
 CHROMA_DIR_B = "data/chroma_db_mpnet"
-OLLAMA_MODEL = "mistral"
+GROQ_MODEL = "llama-3.1-8b-instant"
 CANDIDATE_K  = 20
 TOP_K        = 1
 ALPHA        = 0.5
@@ -105,7 +108,7 @@ def load_models(use_llm: bool = True):
 
     if use_llm:
         print("Loading LLM...")
-        _llm = OllamaLLM(model=OLLAMA_MODEL)
+        _llm = ChatGroq(model=GROQ_MODEL, api_key=os.environ.get("GROQ_API_KEY"))
     else:
         print("Skipping LLM (--no-llm mode). RAG explanations will be unavailable.")
 
@@ -161,12 +164,31 @@ def _knn_recommend(song: str, artist: str) -> dict:
     results = results.drop(index=target_idx)
     best    = results.sort_values("combined_score", ascending=False).iloc[0]
 
+    rec_title  = best["track_name"]
+    rec_artist = best["track_artist"]
+
+    # ── LLM explanation ───────────────────────────────────────────────────────
+    explanation = "(LLM not loaded)"
+    if _llm is not None:
+        input_profile = _build_profile(song, artist, f"Song: {song}\nArtist: {artist}")
+        rec_profile   = _build_profile(rec_title, rec_artist, f"Song: {rec_title}\nArtist: {rec_artist}")
+
+        prompt = PROMPT_TEMPLATE.format(
+            input_profile       = input_profile,
+            recommended_profile = rec_profile,
+            audio_sim           = round(float(best["audio_similarity"]), 4),
+            text_sim            = round(float(best["text_similarity"]), 4),
+            combined            = round(float(best["combined_score"]), 4),
+        )
+        explanation = _llm.invoke(prompt).content.strip()
+
     return {
-        "recommended_song":   best["track_name"],
-        "recommended_artist": best["track_artist"],
+        "recommended_song":   rec_title,
+        "recommended_artist": rec_artist,
         "audio_similarity":   round(float(best["audio_similarity"]), 4),
         "text_similarity":    round(float(best["text_similarity"]), 4),
         "combined_score":     round(float(best["combined_score"]), 4),
+        "explanation":        explanation,
     }
 
 
@@ -267,7 +289,7 @@ def _rag_recommend(song: str, artist: str,
         combined            = best_combined,
     )
 
-    explanation = _llm.invoke(prompt).strip() if _llm is not None else "(LLM not loaded — run without --no-llm for explanations)"
+    explanation = _llm.invoke(prompt).content.strip() if _llm is not None else "(LLM not loaded — run without --no-llm for explanations)"
 
     return {
         "recommended_song":   rec_title,
@@ -310,7 +332,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Music recommender — query all three methods")
     parser.add_argument("song",     help="Song title (must exist in the dataset)")
     parser.add_argument("artist",   help="Artist name")
-    parser.add_argument("--no-llm", action="store_true", help="Skip Ollama — retrieval and scores only")
+    parser.add_argument("--no-llm", action="store_true", help="Skip LLM — retrieval and scores only")
     args = parser.parse_args()
 
     load_models(use_llm=not args.no_llm)

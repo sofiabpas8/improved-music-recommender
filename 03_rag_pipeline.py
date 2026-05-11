@@ -34,6 +34,8 @@ Architecture
 
 import json
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 import numpy as np
 import pandas as pd
@@ -42,14 +44,14 @@ from sklearn.preprocessing import StandardScaler
 
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DATASET_PATH  = "data/songs_dataset.csv"
 CHROMA_DIR_A  = "data/chroma_db_minilm"
 CHROMA_DIR_B  = "data/chroma_db_mpnet"
 RESULTS_PATH  = "data/rag_results.json"
-OLLAMA_MODEL  = "mistral"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 CANDIDATE_K   = 20    # songs retrieved from ChromaDB before re-ranking
 TOP_K         = 1     # final recommendations passed to the LLM
@@ -65,7 +67,7 @@ embeddings_b     = HuggingFaceEmbeddings(model_name="sentence-transformers/all-m
 EMBEDDING_B_NAME = "all-mpnet-base-v2"
 
 # ── LLM (shared across both models for a fair comparison) ────────────────────
-llm = OllamaLLM(model=OLLAMA_MODEL)
+llm = ChatGroq(model=GROQ_MODEL, api_key=os.environ.get("GROQ_API_KEY"))
 
 # ── Audio features (for late fusion) ─────────────────────────────────────────
 AUDIO_COLS = [
@@ -207,7 +209,7 @@ def recommend(song: str, artist: str, name: str,
         combined          = best_combined,
     )
 
-    explanation = llm.invoke(prompt).strip()
+    explanation = llm.invoke(prompt).content.strip()
 
     return {
         "model":            name,

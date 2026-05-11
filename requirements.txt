@@ -1,6 +1,7 @@
 # Core
 pandas
 numpy
+torchvision
 
 # LangChain stack
 langchain
@@ -8,7 +9,7 @@ langchain-core
 langchain-community
 langchain-chroma
 langchain-huggingface
-langchain-ollama
+langchain_groq
 
 # Vector store
 chromadb
@@ -18,6 +19,9 @@ sentence-transformers     # for HuggingFace local models
 
 # k-NN baseline
 scikit-learn
+
+# app
+streamlit
 
 # ── Optional — uncomment depending on your chosen embedding models ──────────
 #langchain-openai          # for OpenAI embeddings or GPT models

@@ -11,3 +11,4 @@ data/tfidf_vectorizer.joblib
 data/rag_results.json
 improved-music-rec/
 *.pyc
+.streamlit/
