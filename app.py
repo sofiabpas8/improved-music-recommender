@@ -416,7 +416,7 @@ st.markdown("""
     ">
         After listening to the recommended songs, please complete this short questionnarie for our study. It will only take you a minute :)
     </div>
-    <a href="https://docs.google.com/forms/d/1Gq3Um5lTD9RzqSEmw7NYLPV_VcmV9y-LzSeO8YpnU5k/viewform"
+    <a href="https://forms.gle/XwHNaszL2v2vU27XA"
        target="_blank"
        style="
            font-family: 'DM Mono', monospace;
