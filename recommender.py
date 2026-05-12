@@ -41,7 +41,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import streamlit as st
-import random
 
 from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from langchain_chroma import Chroma
@@ -158,14 +157,18 @@ def _knn_recommend(song: str, artist: str) -> dict:
         _tfidf_matrix[target_pos], _tfidf_matrix
     )[0]
 
-    combined = ALPHA * audio_sims + (1 - ALPHA) * text_sims + np.random.uniform(0, 0.05, size=len(audio_sims))
-
     results = _df[["track_name", "track_artist"]].copy()
     results["audio_similarity"] = audio_sims
     results["text_similarity"]  = text_sims
-    results["combined_score"]   = combined
     results = results.drop(index=target_idx)
-    best    = results.sort_values("combined_score", ascending=False).iloc[0]
+
+    a_min, a_max = results["audio_similarity"].min(), results["audio_similarity"].max()
+    t_min, t_max = results["text_similarity"].min(),  results["text_similarity"].max()
+    norm_audio = (results["audio_similarity"] - a_min) / (a_max - a_min + 1e-9)
+    norm_text  = (results["text_similarity"]  - t_min) / (t_max  - t_min  + 1e-9)
+    results["combined_score"] = ALPHA * norm_audio + (1 - ALPHA) * norm_text
+
+    best = results.sort_values("combined_score", ascending=False).iloc[0]
 
     rec_title  = best["track_name"]
     rec_artist = best["track_artist"]
@@ -237,25 +240,12 @@ def _rag_recommend(song: str, artist: str,
     query   = f"{song} by {artist}"
     results = chroma.similarity_search_with_relevance_scores(
         query,
-        k=CANDIDATE_K + random.randint(0, 5),  # ← vary how many candidates are fetched
-        filter={
-            "$and": [
-                {"title":  {"$ne": song.lower()}},
-                {"artist": {"$ne": artist.lower()}},
-            ]
-        },
+        k=CANDIDATE_K,
+        filter={"title": {"$ne": song.lower()}},
     )
 
     if not results:
         return {"error": "No candidates retrieved."}
-    
-    results = [
-        (doc, score) for doc, score in results
-        if song.lower() not in doc.metadata.get("title", "").lower()
-    ]
-
-    if not results:
-        return {"error": "No candidates found after filtering."}
 
     input_audio = _get_audio_vec(song, artist)
 
@@ -282,8 +272,7 @@ def _rag_recommend(song: str, artist: str,
     fused = [
         (doc, text_sim, audio_sim,
         ALPHA * (audio_sim - audio_min) / (audio_max - audio_min + 1e-9)
-        + (1 - ALPHA) * (text_sim - text_min) / (text_max - text_min + 1e-9)
-        + random.uniform(0, 0.05))
+        + (1 - ALPHA) * (text_sim - text_min) / (text_max - text_min + 1e-9))
         for doc, text_sim, audio_sim in fused
     ]
 
