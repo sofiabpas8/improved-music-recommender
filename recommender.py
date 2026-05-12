@@ -248,6 +248,14 @@ def _rag_recommend(song: str, artist: str,
 
     if not results:
         return {"error": "No candidates retrieved."}
+    
+    results = [
+        (doc, score) for doc, score in results
+        if song.lower() not in doc.metadata.get("title", "").lower()
+    ]
+
+    if not results:
+        return {"error": "No candidates found after filtering."}
 
     input_audio = _get_audio_vec(song, artist)
 
