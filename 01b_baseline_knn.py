@@ -59,8 +59,7 @@ audio_matrix  = scaler.fit_transform(df[AUDIO_COLS].fillna(0))
 print(f"Loaded {len(df)} songs.")
 
 # ── Text features (TF-IDF) ────────────────────────────────────────────────────
-TEXT_COLS = ["track_name", "track_artist", "track_album_name",
-             "playlist_genre", "playlist_subgenre", "lyrics"]
+TEXT_COLS = ["track_album_name", "playlist_genre", "playlist_subgenre", "lyrics"]
 
 for col in TEXT_COLS:
     if col in df.columns:

@@ -41,8 +41,7 @@ AUDIO_COLS = [
     "liveness", "valence", "tempo",
 ]
 TEXT_COLS = [
-    "track_name", "track_artist", "track_album_name",
-    "playlist_genre", "playlist_subgenre", "lyrics",
+    "track_album_name", "playlist_genre", "playlist_subgenre", "lyrics",
 ]
 
 os.makedirs("data", exist_ok=True)
