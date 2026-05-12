@@ -41,6 +41,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import streamlit as st
+import random
 
 from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from langchain_chroma import Chroma
@@ -157,7 +158,7 @@ def _knn_recommend(song: str, artist: str) -> dict:
         _tfidf_matrix[target_pos], _tfidf_matrix
     )[0]
 
-    combined = ALPHA * audio_sims + (1 - ALPHA) * text_sims
+    combined = ALPHA * audio_sims + (1 - ALPHA) * text_sims + np.random.uniform(0, 0.05, size=len(audio_sims))
 
     results = _df[["track_name", "track_artist"]].copy()
     results["audio_similarity"] = audio_sims
@@ -236,8 +237,13 @@ def _rag_recommend(song: str, artist: str,
     query   = f"{song} by {artist}"
     results = chroma.similarity_search_with_relevance_scores(
         query,
-        k=CANDIDATE_K,
-        filter={"title": {"$ne": song.lower()}},
+        k=CANDIDATE_K + random.randint(0, 5),  # ← vary how many candidates are fetched
+        filter={
+            "$and": [
+                {"title":  {"$ne": song.lower()}},
+                {"artist": {"$ne": artist.lower()}},
+            ]
+        },
     )
 
     if not results:
@@ -267,8 +273,9 @@ def _rag_recommend(song: str, artist: str,
 
     fused = [
         (doc, text_sim, audio_sim,
-         ALPHA * (audio_sim - audio_min) / (audio_max - audio_min + 1e-9)
-         + (1 - ALPHA) * (text_sim - text_min) / (text_max - text_min + 1e-9))
+        ALPHA * (audio_sim - audio_min) / (audio_max - audio_min + 1e-9)
+        + (1 - ALPHA) * (text_sim - text_min) / (text_max - text_min + 1e-9)
+        + random.uniform(0, 0.05))
         for doc, text_sim, audio_sim in fused
     ]
 
