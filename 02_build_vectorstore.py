@@ -57,8 +57,6 @@ documents = []
 
 for _, row in df.iterrows():
     content = (
-        f"Song: {row['track_name']}\n"
-        f"Artist: {row['track_artist']}\n"
         f"Album: {row['track_album_name']}\n"
         f"Genre: {row['playlist_genre']} / {row['playlist_subgenre']}\n"
         f"Lyrics:\n{row['lyrics']}"
