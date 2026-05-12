@@ -74,7 +74,7 @@ def build_text_doc(row) -> str:
         row.get("playlist_subgenre", ""),
         row.get("lyrics", ""),
     ]
-    return " ".join(p for p in parts if p)
+    return " ".join(str(p) for p in parts if p and str(p) != "nan")
 
 text_docs = df.apply(build_text_doc, axis=1).tolist()
 
