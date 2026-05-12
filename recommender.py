@@ -7,7 +7,7 @@ Usage (e.g. from a Streamlit app):
 
     load_models()   # call once at startup — loads all indexes into memory
 
-    results = recommend("Bohemian Rhapsody", "Queen")
+    results = recommend("Yesterday", "The Beatles")
 
 Results format:
     {
