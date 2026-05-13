@@ -201,8 +201,20 @@ def _knn_recommend(song: str, artist: str) -> dict:
 # ── RAG recommendation ────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """\
 You are a music recommendation assistant. Explain why the recommended song \
-is a good match for the input song. Ground your explanation in the data \
-provided — do not invent information.
+is a good match for the input song in a natural, conversational way.
+
+You have been given the full profiles of both songs including their lyrics, \
+genre, and audio characteristics. Use this data to inform your explanation, \
+but DO NOT mention any numbers, scores, or decimal values in your response. \
+Instead, interpret them in plain language:
+  - high energy (> 0.7) → "energetic", "lively", "intense"
+  - low energy (< 0.4)  → "calm", "mellow", "laid-back"
+  - high valence (> 0.7) → "upbeat", "joyful", "feel-good"
+  - low valence (< 0.4)  → "melancholic", "dark", "emotional"
+  - high danceability (> 0.7) → "great for dancing", "groovy", "rhythmic"
+  - high acousticness (> 0.7) → "acoustic", "organic", "stripped-back"
+  - high instrumentalness (> 0.5) → "instrumental", "minimal vocals"
+  - high speechiness (> 0.6) → "rap", "spoken word", "lyric-heavy"
 
 ━━━ INPUT SONG ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {input_profile}
@@ -210,15 +222,12 @@ provided — do not invent information.
 ━━━ RECOMMENDED SONG ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {recommended_profile}
 
-━━━ SIMILARITY SCORES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Audio similarity : {audio_sim:.3f}
-  Text similarity  : {text_sim:.3f}
-  Combined score   : {combined:.3f}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Write a short, friendly explanation (3–5 sentences) of why the recommended \
-song is a great match. Mention specific shared elements — lyrical themes, \
-mood, genre, or audio qualities — drawing directly from the profiles above.\
+song is a great match. Focus on shared mood, energy, genre, lyrical themes, \
+and style. Never mention numbers, scores, or decimal values — speak as if you \
+are recommending a song to a friend.\
 """
 
 
