@@ -292,22 +292,38 @@ st.markdown('<div class="search-container">', unsafe_allow_html=True)
 col_song, col_artist, col_btn = st.columns([3, 2, 1], gap="medium")
 
 with col_song:
+    song_list_df = get_song_list()
+    all_titles = song_list_df["track_name"].dropna().unique().tolist()
+
     song_input = st.text_input(
         "Song title",
-        placeholder="e.g. Bohemian Rhapsody",
+        placeholder="e.g. Shape of You",
         key="song",
     )
+
+    # Show dropdown suggestions while typing
+    if song_input:
+        matches = [t for t in all_titles if song_input.lower() in t.lower()][:8]
+        if matches:
+            selected = st.selectbox(
+                "Suggestions (select to use):",
+                options=[""] + matches,
+                key="song_suggestion",
+                label_visibility="collapsed",
+            )
+            if selected:
+                song_input = selected
 
 with col_artist:
     artist_input = st.text_input(
         "Artist (optional)",
-        placeholder="e.g. Queen",
+        placeholder="e.g. Ed Sheeran",
         key="artist",
     )
 
 with col_btn:
     st.markdown("<div style='height: 1.95rem'></div>", unsafe_allow_html=True)
-    search_clicked = st.button("Find similar →")
+    search_clicked = st.button("Search →")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
