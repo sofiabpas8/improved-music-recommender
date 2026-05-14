@@ -122,14 +122,15 @@ p, label, div, span, input, button {
     border: none !important;
     border-radius: 2px !important;
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.78rem !important;
+    font-size: 0.62rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.14em !important;
+    letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
-    padding: 0.65rem 2.5rem !important;
+    padding: 0.5rem 0.8rem !important;
     transition: all 0.2s !important;
     width: 100%;
 }
+            
 [data-testid="stButton"] button:hover {
     background: #ffffff !important;
     transform: translateY(-1px);
