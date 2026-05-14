@@ -295,25 +295,14 @@ col_song, col_artist, col_btn = st.columns([3, 2, 1], gap="medium")
 with col_song:
     song_list_df = get_song_list()
     all_titles = song_list_df["track_name"].dropna().unique().tolist()
+    all_titles_sorted = sorted(all_titles)
 
-    song_input = st.text_input(
+    song_input = st.selectbox(
         "Song title",
-        placeholder="e.g. Shape of You",
+        options=[""] + all_titles_sorted,
         key="song",
+        placeholder="Type to search...",
     )
-
-    # Show dropdown suggestions while typing
-    if song_input:
-        matches = [t for t in all_titles if song_input.lower() in t.lower()][:8]
-        if matches:
-            selected = st.selectbox(
-                "Suggestions (select to use):",
-                options=[""] + matches,
-                key="song_suggestion",
-                label_visibility="collapsed",
-            )
-            if selected:
-                song_input = selected
 
 with col_artist:
     artist_input = st.text_input(
@@ -431,7 +420,7 @@ st.markdown("""
         margin-bottom: 0.6rem;
         letter-spacing: 0.05em;
     ">
-        After listening to the recommended songs, please complete this short questionnarie for our study. It will only take you a minute :)
+        After listening to the recommended songs, please complete this short questionnaire for our study. It will only take you a minute :)
     </div>
     <a href="https://forms.gle/XwHNaszL2v2vU27XA"
        target="_blank"
