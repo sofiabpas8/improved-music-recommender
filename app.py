@@ -279,26 +279,30 @@ with st.spinner("Loading models into memory..."):
 
 
 # ── Search form ───────────────────────────────────────────────────────────────
-col_song, col_artist, col_btn = st.columns([3, 2, 1], gap="medium")
+col_song, col_btn = st.columns([5, 1], gap="medium")
 
 with col_song:
     song_list_df = get_song_list()
-    all_titles = song_list_df["track_name"].dropna().unique().tolist()
-    all_titles_sorted = sorted(all_titles)
+    # Build "Song Title — Artist" options
+    song_list_df["display"] = (
+        song_list_df["track_name"].fillna("") 
+        + " — " 
+        + song_list_df["track_artist"].fillna("")
+    )
+    all_options = sorted(song_list_df["display"].dropna().unique().tolist())
 
-    song_input = st.selectbox(
+    selected_option = st.selectbox(
         "Song title",
-        options=[""] + all_titles_sorted,
+        options=[""] + all_options,
         key="song",
-        placeholder="Type to search...",
+        placeholder="Type song or artist...",
     )
 
-with col_artist:
-    artist_input = st.text_input(
-        "Artist (optional)",
-        placeholder="e.g. Ed Sheeran",
-        key="artist",
-    )
+    # Split back into title and artist
+    if selected_option and " — " in selected_option:
+        song_input, artist_input = selected_option.split(" — ", 1)
+    else:
+        song_input, artist_input = selected_option or "", ""
 
 with col_btn:
     st.markdown("<div style='height: 1.95rem'></div>", unsafe_allow_html=True)
