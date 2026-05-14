@@ -83,15 +83,6 @@ p, label, div, span, input, button {
     margin-top: 0.8rem;
 }
 
-/* ── Search area ── */
-.search-container {
-    background: rgba(232, 228, 220, 0.03);
-    border: 1px solid rgba(232, 228, 220, 0.1);
-    border-radius: 2px;
-    padding: 2rem 2.5rem;
-    margin-bottom: 2.5rem;
-}
-
 /* ── Streamlit input overrides ── */
 [data-testid="stTextInput"] input {
     background: rgba(10, 10, 15, 0.8) !important;
@@ -288,8 +279,6 @@ with st.spinner("Loading models into memory..."):
 
 
 # ── Search form ───────────────────────────────────────────────────────────────
-st.markdown('<div class="search-container">', unsafe_allow_html=True)
-
 col_song, col_artist, col_btn = st.columns([3, 2, 1], gap="medium")
 
 with col_song:
@@ -315,12 +304,10 @@ with col_btn:
     st.markdown("<div style='height: 1.95rem'></div>", unsafe_allow_html=True)
     search_clicked = st.button("Search →")
 
-st.markdown('</div>', unsafe_allow_html=True)
-
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if search_clicked:
-    if not song_input.strip():
+    if not song_input or not song_input.strip():
         st.markdown('<div class="error-box">Please enter a song title.</div>', unsafe_allow_html=True)
     else:
         from recommender import recommend
