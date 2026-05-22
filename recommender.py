@@ -247,13 +247,19 @@ def _build_profile(title: str, artist: str, doc_content: str) -> str:
 def _retrieval_recommend(song: str, artist: str,
                    name: str, chroma, embeddings) -> dict:
     query   = f"{song} by {artist}"
-    results = chroma.similarity_search_with_relevance_scores(
-        query,
-        k=CANDIDATE_K,
-        filter={"title": {"$ne": song.lower()}},
-    )
+    try:
+        results = chroma.similarity_search_with_relevance_scores(
+            query,
+            k=CANDIDATE_K,
+            filter={"title": {"$ne": song.lower()}},
+        )
+        print(f"[DEBUG] {name}: got {len(results)} results for '{query}'")
+    except Exception as e:
+        print(f"[DEBUG] {name}: search failed with error: {e}")
+        return {"error": str(e)}
 
     if not results:
+        print(f"[DEBUG] {name}: results list is empty")
         return {"error": "No candidates retrieved."}
 
     input_audio = _get_audio_vec(song, artist)
