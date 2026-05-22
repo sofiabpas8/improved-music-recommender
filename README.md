@@ -120,8 +120,8 @@ python 02_build_vectorstore.py
 python 03_rag_pipeline.py
 
 # Query all three models from the command line
-python recommender.py "Bohemian Rhapsody" "Queen"
-python recommender.py "Bohemian Rhapsody" "Queen" --no-llm   # skip LLM
+python recommender.py "Yesterday" "The Beatles"
+python recommender.py "Yesterday" "The Beatles" --no-llm   # skip LLM
 ```
 
 ---
