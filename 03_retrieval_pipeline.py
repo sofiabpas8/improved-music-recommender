@@ -1,7 +1,7 @@
 """
-STEP 3 — RAG Recommendation Pipeline with Late Fusion + Conversational Explanation
+STEP 3 — Retrieval Recommendation Pipeline with Late Fusion + Conversational Explanation
 
-Runs TWO RAG recommenders (one per embedding model from Step 2) and compares
+Runs TWO Retrieval recommenders (one per embedding model from Step 2) and compares
 their results against the k-NN cosine baseline from Step 1b.
 
 Retrieval strategy — late fusion
@@ -26,9 +26,9 @@ Architecture
 ────────────
   User query (song title + artist)
       │
-      ├─► RAG Model A  →  ChromaDB A (MiniLM)  →  text_sim  ─┐
+      ├─► Retrieval Model A  →  ChromaDB A (MiniLM)  →  text_sim  ─┐
       │                                                        ├─► late fusion ──► re-rank ──► LLM ──► explanation
-      └─► RAG Model B  →  ChromaDB B (mpnet)   →  text_sim  ─┘
+      └─► Retrieval Model B  →  ChromaDB B (mpnet)   →  text_sim  ─┘
                                                    audio_sim ─┘  (shared, model-agnostic)
 """
 
@@ -50,16 +50,16 @@ from langchain_groq import ChatGroq
 DATASET_PATH  = "data/songs_dataset.csv"
 CHROMA_DIR_A  = "data/chroma_db_minilm"
 CHROMA_DIR_B  = "data/chroma_db_mpnet"
-RESULTS_PATH  = "data/rag_results.json"
+RESULTS_PATH  = "data/retrieval_results.json"
 GROQ_MODEL = "llama-3.1-8b-instant"
 
 CANDIDATE_K   = 20    # songs retrieved from ChromaDB before re-ranking
-TOP_K         = 1     # final recommendations passed to the LLM
+TOP_K         = 1     # final recommendations passed to the LLM (only 1 for faster evaluation from users)
 ALPHA         = 0.5   # weight of audio similarity in combined score (0 = text only, 1 = audio only)
 
 os.makedirs("data", exist_ok=True)
 
-# ── Embedding models (must match the ones used in Step 2) ─────────────────────
+# ── Embedding models (matches the ones used in Step 2) ─────────────────────
 embeddings_a     = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 EMBEDDING_A_NAME = "all-MiniLM-L6-v2"
 
@@ -223,7 +223,7 @@ def recommend(song: str, artist: str, name: str,
     }
 
 
-def run_rag_model(name: str, embeddings, chroma_dir: str,
+def run_retrieval_model(name: str, embeddings, chroma_dir: str,
                   queries: list) -> dict:
     """Run recommendations for a list of queries with one embedding model."""
     if not os.path.exists(chroma_dir):
@@ -232,7 +232,7 @@ def run_rag_model(name: str, embeddings, chroma_dir: str,
         return {}
 
     print(f"\n{'='*55}")
-    print(f"  RAG Model: {name}")
+    print(f"  Retrieval Model: {name}")
     print(f"{'='*55}")
 
     results = []
@@ -255,17 +255,17 @@ def run_rag_model(name: str, embeddings, chroma_dir: str,
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 QUERIES = [
-    {"song": "Bohemian Rhapsody", "artist": "Queen"},
+    {"song": "Photograph", "artist": "Ed Sheeran"},
     # {"song": "Blinding Lights", "artist": "The Weeknd"},
 ]
 
 all_results = []
 
-result_a = run_rag_model(EMBEDDING_A_NAME, embeddings_a, CHROMA_DIR_A, QUERIES)
+result_a = run_retrieval_model(EMBEDDING_A_NAME, embeddings_a, CHROMA_DIR_A, QUERIES)
 if result_a:
     all_results.append(result_a)
 
-result_b = run_rag_model(EMBEDDING_B_NAME, embeddings_b, CHROMA_DIR_B, QUERIES)
+result_b = run_retrieval_model(EMBEDDING_B_NAME, embeddings_b, CHROMA_DIR_B, QUERIES)
 if result_b:
     all_results.append(result_b)
 

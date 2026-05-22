@@ -18,7 +18,7 @@ Results format:
             "text_similarity":    0.74,
             "combined_score":     0.80,
         },
-        "rag_minilm": {
+        "retrieval_minilm": {
             "recommended_song":   "...",
             "recommended_artist": "...",
             "audio_similarity":   0.87,
@@ -26,7 +26,7 @@ Results format:
             "combined_score":     0.80,
             "explanation":        "...",
         },
-        "rag_mpnet": { ... },
+        "retrieval_mpnet": { ... },
     }
 
 Raises ValueError if the song is not found in the dataset.
@@ -112,7 +112,7 @@ def load_models(use_llm: bool = True):
         api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
         _llm = ChatGroq(model=GROQ_MODEL, api_key=api_key)
     else:
-        print("Skipping LLM (--no-llm mode). RAG explanations will be unavailable.")
+        print("Skipping LLM (--no-llm mode). Retrieval explanations will be unavailable.")
 
     _loaded = True
     print("✓ All models loaded.\n")
@@ -198,7 +198,7 @@ def _knn_recommend(song: str, artist: str) -> dict:
     }
 
 
-# ── RAG recommendation ────────────────────────────────────────────────────────
+# ── Retrieval recommendation ────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """\
 You are a music recommendation assistant. Explain why the recommended song \
 is a good match for the input song in a natural, conversational way.
@@ -244,7 +244,7 @@ def _build_profile(title: str, artist: str, doc_content: str) -> str:
     return "\n".join(lines)
 
 
-def _rag_recommend(song: str, artist: str,
+def _retrieval_recommend(song: str, artist: str,
                    name: str, chroma, embeddings) -> dict:
     query   = f"{song} by {artist}"
     results = chroma.similarity_search_with_relevance_scores(
@@ -328,14 +328,14 @@ def recommend(song: str, artist: str) -> dict:
 
     Returns
     -------
-    dict with keys "knn", "rag_minilm", "rag_mpnet"
+    dict with keys "knn", "retrieval_minilm", "retrieval_mpnet"
     """
     _check_loaded()
 
     return {
         "knn":        _knn_recommend(song, artist),
-        "rag_minilm": _rag_recommend(song, artist, "MiniLM", _chroma_a, _embeddings_a),
-        "rag_mpnet":  _rag_recommend(song, artist, "mpnet",  _chroma_b, _embeddings_b),
+        "retrieval_minilm": _retrieval_recommend(song, artist, "MiniLM", _chroma_a, _embeddings_a),
+        "retrieval_mpnet":  _retrieval_recommend(song, artist, "mpnet",  _chroma_b, _embeddings_b),
     }
 
 

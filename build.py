@@ -83,7 +83,7 @@ joblib.dump(tfidf, "data/tfidf_vectorizer.joblib")
 print(f"  Vocabulary: {len(tfidf.vocabulary_)} terms")
 print("  Saved tfidf_matrix.npz + tfidf_vectorizer.joblib")
 
-# ── ChromaDB vector stores (RAG A + B) ────────────────────────────────────────
+# ── ChromaDB vector stores (Retrieval A + B) ────────────────────────────────────────
 documents = []
 for _, row in df.iterrows():
     content = (

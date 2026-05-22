@@ -39,7 +39,6 @@ import pandas as pd
 import requests
 
 # ── Config (overridable via CLI) ──────────────────────────────────────────────
-
 DEFAULT_WORKERS     = 5
 DEFAULT_DELAY       = 0.2    # seconds between requests per worker
 DEFAULT_TIMEOUT     = 8      # request timeout in seconds
@@ -49,7 +48,6 @@ RETRY_DELAY         = 2      # seconds between network-error retries
 BASE_URL = "https://api.lyrics.ovh/v1"
 
 # ── Candidate generation ──────────────────────────────────────────────────────
-
 def _strip_feat(s: str) -> str:
     return re.sub(r"\s*(feat\.?|ft\.?|featuring)\s+[^,\(\[\n]+", "", s, flags=re.I).strip()
 
@@ -114,7 +112,6 @@ def candidate_queries(raw_artist: str, raw_title: str) -> list[tuple[str, str]]:
 
 
 # ── Single URL attempt ────────────────────────────────────────────────────────
-
 def _try_url(artist: str, title: str, timeout: int) -> tuple[str | None, bool]:
     url = f"{BASE_URL}/{requests.utils.quote(artist)}/{requests.utils.quote(title)}"
     try:
@@ -165,7 +162,6 @@ def fetch_lyrics(
 
 
 # ── Progress helpers (thread-safe) ────────────────────────────────────────────
-
 def load_progress(progress_file: Path) -> dict:
     if not progress_file.exists():
         return {}
@@ -192,7 +188,6 @@ def save_progress(progress_file: Path, progress: dict, lock: threading.Lock) -> 
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(description="Enrich a songs CSV with lyrics from lyrics.ovh")
     parser.add_argument("--input",        "-i", required=True)

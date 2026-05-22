@@ -29,7 +29,6 @@ import pandas as pd
 import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
-
 BASE_URL     = "https://api.lyrics.ovh/v1"
 DELAY        = 0.6    # seconds between requests (be polite to the free API)
 TIMEOUT      = 8      # request timeout in seconds
@@ -37,7 +36,6 @@ MAX_RETRIES  = 3      # per-row retry attempts on transient network errors
 RETRY_DELAY  = 3      # seconds between retries
 
 # ── Candidate generation ──────────────────────────────────────────────────────
-
 def _strip_feat(s: str) -> str:
     """Remove 'feat. X', 'ft. X', 'featuring X' from a string."""
     return re.sub(
@@ -126,7 +124,6 @@ def candidate_queries(raw_artist: str, raw_title: str):
 
 
 # ── Single URL attempt ────────────────────────────────────────────────────────
-
 def _try_url(artist: str, title: str) -> tuple[str | None, bool]:
     """
     Make one HTTP request for (artist, title).
@@ -154,7 +151,6 @@ def _try_url(artist: str, title: str) -> tuple[str | None, bool]:
 
 
 # ── Main fetch with candidate fallback ───────────────────────────────────────
-
 def fetch_lyrics(artist: str, title: str) -> tuple[str | None, str | None]:
     """
     Try each candidate (artist, title) variant in turn.
@@ -187,7 +183,6 @@ def fetch_lyrics(artist: str, title: str) -> tuple[str | None, str | None]:
 
 
 # ── Progress file ─────────────────────────────────────────────────────────────
-
 def load_progress(progress_file: Path) -> dict:
     """Load previously saved progress, migrating old string-value format if needed."""
     if not progress_file.exists():
@@ -215,7 +210,6 @@ def save_progress(progress_file: Path, progress: dict) -> None:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(description="Enrich a songs CSV with lyrics from lyrics.ovh")
     parser.add_argument("--input",      "-i", required=True,  help="Input CSV path")

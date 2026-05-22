@@ -261,7 +261,7 @@ def get_song_list():
 st.markdown("""
 <div class="app-header">
     <h1>Music Recommender Arena</h1>
-    <div class="subtitle">k-NN baseline &nbsp;·&nbsp; RAG MiniLM &nbsp;·&nbsp; RAG MPNet</div>
+    <div class="subtitle">k-NN baseline &nbsp;·&nbsp; Retrieval MiniLM &nbsp;·&nbsp; Retrieval MPNet</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -335,13 +335,13 @@ if search_clicked:
 
         if results:
             knn    = results.get("knn", {})
-            minilm = results.get("rag_minilm", {})
-            mpnet  = results.get("rag_mpnet", {})
+            minilm = results.get("retrieval_minilm", {})
+            mpnet  = results.get("retrieval_mpnet", {})
 
             cards = [
                 ("k-NN Baseline",      "knn",    "card-knn",    "label-knn",    knn),
-                ("RAG · MiniLM-L6-v2", "minilm", "card-minilm", "label-minilm", minilm),
-                ("RAG · MPNet",        "mpnet",  "card-mpnet",  "label-mpnet",  mpnet),
+                ("Retrieval · MiniLM-L6-v2", "minilm", "card-minilm", "label-minilm", minilm),
+                ("Retrieval · MPNet",        "mpnet",  "card-mpnet",  "label-mpnet",  mpnet),
             ]
 
             cols = st.columns(3, gap="medium")
@@ -436,6 +436,6 @@ st.markdown("""
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="app-footer">
-    Music Recommender Arena &nbsp;·&nbsp; k-NN vs RAG comparison
+    Music Recommender Arena &nbsp;·&nbsp; k-NN vs Retrieval comparison
 </div>
 """, unsafe_allow_html=True)
