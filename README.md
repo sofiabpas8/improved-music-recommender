@@ -133,3 +133,11 @@ python recommender.py "Bohemian Rhapsody" "Queen" --no-llm   # skip LLM
 - **Two Retrieval models**: MiniLM and MPNet embeddings are compared in parallel.
 - **Late fusion**: Audio and text similarity are combined after retrieval so both signals influence the final ranking.
 - **Conversational LLM**: Every recommendation includes a natural-language explanation grounded in the song profiles and similarity scores.
+
+## Authors
+
+**Sofía Barajas Pascual**
+
+**Asier Azpiri Iriarte**
+
+**Vera Senderowicz Guerra**
