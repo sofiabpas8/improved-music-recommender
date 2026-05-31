@@ -10,7 +10,7 @@ Try it live → **[Music Recommender Arena](https://improved-music-recommender.s
 
 | Model | Method | Embeddings |
 |---|---|---|
-| **k-NN Baseline** | Cosine Similarity on audio features + TF-IDF lyrics | — |
+| **k-NN Baseline** | Cosine similarity on audio features + TF-IDF lyrics | — |
 | **Retrieval · MiniLM** | Late fusion: ChromaDB retrieval + audio similarity | `all-MiniLM-L6-v2` |
 | **Retrieval · MPNet** | Late fusion: ChromaDB retrieval + audio similarity | `all-mpnet-base-v2` |
 
@@ -24,15 +24,16 @@ All three models produce a recommended song and a conversational explanation of 
 Computes cosine similarity between the input song and every song in the catalog using a combined score of normalised audio features (danceability, energy, tempo, etc.) and TF-IDF lyrics vectors.
 
 ### Retrieval Models (Late Fusion)
-1. ChromaDB retrieves the top candidate songs by **text similarity** (lyrics embeddings).
+1. ChromaDB retrieves the top-20 candidate songs by **text similarity** (lyrics embeddings).
 2. **Audio cosine similarity** is computed separately for each candidate.
-3. A **combined score** merges both signals: `score = 0.5 × audio_sim + 0.5 × text_sim`
-4. Candidates are re-ranked by combined score and the top result is selected.
+3. Both signals are **min-max normalised** to [0, 1] across the candidate pool.
+4. A **combined score** merges both signals: `score = 0.5 × audio_sim + 0.5 × text_sim`
+5. Candidates are re-ranked by combined score and the top result is selected.
 
 ### LLM Explanation
-The LLM sits **after** retrieval — it does not affect ranking. It receives the full profiles of both the input and recommended song (lyrics, audio features, metadata) plus the similarity scores, and generates a 3–5 sentence explanation grounded in that data.
+The LLM sits **after** retrieval — it does not affect ranking. It receives the full profiles of both the input and recommended song (lyrics, audio features, metadata) and generates a 3–5 sentence natural-language explanation. Numerical scores are never mentioned in the output.
 
-One shared LLM is used across all three models so the comparison is fair.
+One shared LLM instance is used across all three models so the comparison is fair.
 
 ```
 User query (song title + artist)
@@ -50,36 +51,49 @@ User query (song title + artist)
 
 ## Project Structure
 
+The root contains only the files that make up the final working system. Development and exploration scripts are in [`old_scripts/`](#development-history-old_scripts).
+
 ```
 improved-music-recommender/
-├── data/                         ← hosted on Hugging Face (auto-downloaded at startup)
-│   ├── songs_clean.csv           ← cleaned dataset with lyrics + audio features
-│   ├── audio_matrix.npy          ← pre-scaled audio feature matrix
-│   ├── audio_scaler.joblib       ← fitted StandardScaler
-│   ├── tfidf_matrix.npz          ← TF-IDF lyrics matrix
-│   ├── tfidf_vectorizer.joblib   ← fitted TF-IDF vectorizer
-│   ├── chroma_db_minilm/         ← ChromaDB vector store (MiniLM)
-│   └── chroma_db_mpnet/          ← ChromaDB vector store (MPNet)
-├── app.py                        ← Streamlit web interface
-├── recommender.py                ← unified inference module (used by app.py)
-├── build.py                      ← builds audio + TF-IDF indexes from dataset
-├── 01b_baseline_knn.py           ← k-NN baseline script
-├── 02_build_vectorstore.py       ← builds ChromaDB vector stores
-├── 03_rag_pipeline.py            ← Retrieval pipeline with late fusion + LLM
-├── enrich_lyrics.py              ← lyrics enrichment utilities
-├── enriched_songs_batched.py     ← batch lyrics enrichment
-└── requirements.txt
+├── data/                           ← hosted on Hugging Face (auto-downloaded at startup)
+│   ├── songs_clean.csv             ← deduplicated dataset with audio features + lyrics
+│   ├── audio_matrix.npy            ← pre-scaled audio feature matrix (StandardScaler)
+│   ├── audio_scaler.joblib         ← fitted StandardScaler
+│   ├── tfidf_matrix.npz            ← TF-IDF sparse matrix (k-NN text branch)
+│   ├── tfidf_vectorizer.joblib     ← fitted TF-IDF vectorizer
+│   ├── chroma_db_minilm/           ← ChromaDB vector store (MiniLM embeddings)
+│   └── chroma_db_mpnet/            ← ChromaDB vector store (MPNet embeddings)
+│
+├── app.py                          ← Streamlit web interface (entry point)
+├── recommender.py                  ← all recommendation logic: k-NN, Retrieval, LLM
+├── build.py                        ← builds all indexes from the dataset (run once)
+├── enriched_songs_batched.py       ← batch lyrics enrichment via lyrics.ovh (run once)
+│
+└── old_scripts/                    ← development progression (see below)
+    ├── 01b_baseline_knn.py
+    ├── 02_build_vectorstore.py
+    ├── 03_retrieval_pipeline.py
+    ├── enrich_lyrics.py
+    └── upload.py
 ```
 
 ---
 
 ## Dataset
 
-The dataset is hosted on Hugging Face at [`cosita2000/music-recommender-data`](https://huggingface.co/datasets/cosita2000/music-recommender-data) and is downloaded automatically when the Streamlit app starts. It contains ~26,000+ songs with audio features and lyrics.
+Source: [`joebeachcapital/30000-spotify-songs`](https://www.kaggle.com/datasets/joebeachcapital/30000-spotify-songs) (Kaggle), deduplicated to ~26k songs.
+
+Lyrics were enriched using the [lyrics.ovh](https://lyrics.ovh) API via `enriched_songs_batched.py`, achieving ~2% coverage after deduplication (most songs returned no match from the free API).
+
+The final dataset is hosted on Hugging Face at [`cosita2000/music-recommender-data`](https://huggingface.co/datasets/cosita2000/music-recommender-data) and is downloaded automatically when the Streamlit app starts.
+
+**Audio features used (11):** valence, energy, danceability, tempo, acousticness, instrumentalness, liveness, loudness, mode, key, speechiness.
+
+**Text fields used for TF-IDF / embeddings:** album name, genre, subgenre, lyrics.
 
 ---
 
-## Local setup
+## Local Setup
 
 ```bash
 # 1. Clone the repository
@@ -104,40 +118,33 @@ streamlit run app.py
 
 ---
 
-## Run individual scripts
+## Development History (`old_scripts/`)
 
-```bash
-# Build audio + TF-IDF indexes from the dataset
-python build.py
+These scripts document the step-by-step development process that led to the final system. They are **not** called by the app — their logic was consolidated into `recommender.py` and `build.py` — but they show how the project evolved from a simple k-NN baseline to the full retrieval + late-fusion pipeline.
 
-# Run k-NN baseline
-python 01b_baseline_knn.py
-
-# Build ChromaDB vector stores (both embedding models)
-python 02_build_vectorstore.py
-
-# Run Retrieval pipeline with late fusion + LLM explanations
-python 03_rag_pipeline.py
-
-# Query all three models from the command line
-python recommender.py "Yesterday" "The Beatles"
-python recommender.py "Yesterday" "The Beatles" --no-llm   # skip LLM
-```
+| Script | What it does |
+|---|---|
+| `01b_baseline_knn.py` | First working prototype of the k-NN recommender. Fits its own StandardScaler and TF-IDF from the raw dataset and returns top-k similar songs via late fusion. Superseded by `recommender.py`. |
+| `02_build_vectorstore.py` | Standalone script that builds the two ChromaDB vector stores (MiniLM and MPNet). Superseded by `build.py`, which builds all indexes (audio, TF-IDF, ChromaDB) in one pass. |
+| `03_retrieval_pipeline.py` | First working prototype of the retrieval + late-fusion + LLM pipeline. Runs queries against both ChromaDB stores and saves results to `data/retrieval_results.json`. Superseded by `recommender.py`. |
+| `enrich_lyrics.py` | Sequential (single-threaded) version of the lyrics enrichment script. Superseded by `enriched_songs_batched.py`, which adds parallel workers and a `--retry-misses` mode. |
+| `upload.py` | One-off script used to upload the final dataset to Hugging Face. |
 
 ---
 
-## Changes from the original project
+## Changes from the Original Project
 
-- **k-NN metric**: Euclidean and Manhattan distances removed. Only **Cosine Similarity** is kept — scale-invariant and better suited for high-dimensional feature vectors.
-- **Dataset**: The Million Song Dataset (MSD) has been replaced with a custom dataset enriched with lyrics.
-- **Two Retrieval models**: MiniLM and MPNet embeddings are compared in parallel.
-- **Late fusion**: Audio and text similarity are combined after retrieval so both signals influence the final ranking.
-- **Conversational LLM**: Every recommendation includes a natural-language explanation grounded in the song profiles and similarity scores.
+Original project: **[sofiabpas8/music-recommender](https://github.com/sofiabpas8/music-recommender)**
+
+
+- **k-NN metric**: Euclidean and Manhattan distances removed. Only **cosine similarity** is kept — scale-invariant and better suited for high-dimensional feature vectors.
+- **Dataset**: Replaced with a custom dataset enriched with lyrics via lyrics.ovh.
+- **Two Retrieval models**: MiniLM and MPNet embeddings compared in parallel.
+- **Late fusion**: Audio and text similarity are min-max normalised and combined after retrieval so both signals contribute equally to the final ranking.
+- **Conversational LLM**: Every recommendation includes a natural-language explanation grounded in the song profiles — numerical scores are never surfaced to the user.
+
+---
 
 ## Authors
 
-**Sofía Barajas Pascual**
-
-**Asier Azpiri Iriarte**
-
-**Vera Senderowicz Guerra**
+**Sofía Barajas Pascual** · **Asier Azpiri Iriarte** · **Vera Senderowicz Guerra**
