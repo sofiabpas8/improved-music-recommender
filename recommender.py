@@ -253,9 +253,7 @@ def _retrieval_recommend(song: str, artist: str,
             k=CANDIDATE_K,
             filter={"title": {"$ne": song.lower()}},
         )
-        print(f"[DEBUG] {name}: got {len(results)} results for '{query}'")
     except Exception as e:
-        print(f"[DEBUG] {name}: search failed with error: {e}")
         return {"error": str(e)}
 
     if not results:
